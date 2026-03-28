@@ -27,10 +27,15 @@ fn main() -> std::io::Result<()> {
     log.append(b"hello".to_vec())?;
     log.append(b"world".to_vec())?;
 
-    log.flush()?;
-
     Ok(())
 }
+```
+
+## Building
+
+```bash
+cargo build
+cargo test
 ```
 
 ---
@@ -79,6 +84,9 @@ This approach provides high throughput while keeping implementation simple.
 
 * [x] Append-only log
 * [x] Binary message format
+* [x] Basic tests
+
+### Next
 
 ### Next
 
