@@ -12,6 +12,8 @@ Inspired by systems like Kafka, Logra focuses on simplicity, speed, and a solid 
 * Binary encoding (length-prefixed)
 * Offset-based storage
 * Buffered writes for high throughput
+* Flush policy (interval/size based)
+* Offset recovery on startup
 * Minimal and extensible design
 
 ---
@@ -19,7 +21,7 @@ Inspired by systems like Kafka, Logra focuses on simplicity, speed, and a solid 
 ## Example
 
 ```rust
-use logra::Log;
+use logra::{Log, LogConfig};
 
 fn main() -> std::io::Result<()> {
     let mut log = Log::new("data.log")?;
@@ -29,6 +31,16 @@ fn main() -> std::io::Result<()> {
 
     Ok(())
 }
+```
+
+With custom flush policy:
+
+```rust
+let config = LogConfig {
+    flush_interval_ms: Some(1000),
+    flush_size_bytes: Some(4096),
+};
+let mut log = Log::with_config("data.log", config)?;
 ```
 
 ## Building
@@ -85,8 +97,8 @@ This approach provides high throughput while keeping implementation simple.
 * [x] Append-only log
 * [x] Binary message format
 * [x] Basic tests
-
-### Next
+* [x] Flush policy (interval/size)
+* [x] Offset recovery on startup
 
 ### Next
 
