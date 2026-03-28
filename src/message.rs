@@ -29,6 +29,7 @@ pub fn encode(msg: &Message) -> Vec<u8> {
 pub fn decode(buf: &[u8]) -> std::io::Result<Message> {
     let mut cursor = Cursor::new(buf);
 
+    let _len = cursor.read_u32::<BigEndian>()?;
     let offset = cursor.read_u64::<BigEndian>()?;
     let timestamp = cursor.read_u64::<BigEndian>()?;
 
