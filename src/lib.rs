@@ -1,9 +1,11 @@
+pub mod consumer;
 pub mod log;
 pub mod message;
 pub mod mmap_reader;
 pub mod reader;
 pub mod segment;
 
+pub use consumer::Consumer;
 pub use log::{Log, LogConfig};
 pub use message::Message;
 pub use mmap_reader::MmapReader;

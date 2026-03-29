@@ -1,4 +1,4 @@
-use logra::{message, Log, LogReader, Message, MmapReader, SegmentedLog};
+use logra::{message, Consumer, Log, LogReader, Message, MmapReader, SegmentedLog};
 
 #[test]
 fn test_message_encode_decode() {
@@ -131,4 +131,56 @@ fn test_segmented_log() {
         "Expected at least 2 segments, got {}",
         seg_count
     );
+}
+
+#[test]
+fn test_consumer() {
+    let path = "/tmp/logra_consumer_test.log";
+    let _ = std::fs::remove_file(path);
+
+    {
+        let mut log = Log::new(path).unwrap();
+        log.append(b"hello".to_vec()).unwrap();
+        log.append(b"world".to_vec()).unwrap();
+        log.append(b"test".to_vec()).unwrap();
+    }
+
+    let mut consumer = Consumer::new(path).unwrap();
+
+    let msg1 = consumer.poll().unwrap().unwrap();
+    assert_eq!(msg1.value, b"hello");
+
+    let msg2 = consumer.poll().unwrap().unwrap();
+    assert_eq!(msg2.value, b"world");
+
+    let pos = consumer.position();
+    consumer.seek(0).unwrap();
+    assert_eq!(consumer.position(), 0);
+
+    let msg = consumer.poll().unwrap().unwrap();
+    assert_eq!(msg.value, b"hello");
+
+    consumer.seek(pos).unwrap();
+    let msg3 = consumer.poll().unwrap().unwrap();
+    assert_eq!(msg3.value, b"test");
+}
+
+#[test]
+fn test_consumer_batch() {
+    let path = "/tmp/logra_consumer_batch_test.log";
+    let _ = std::fs::remove_file(path);
+
+    {
+        let mut log = Log::new(path).unwrap();
+        for i in 0..5 {
+            log.append(format!("msg{}", i).into_bytes()).unwrap();
+        }
+    }
+
+    let mut consumer = Consumer::new(path).unwrap();
+    let batch = consumer.poll_batch(3).unwrap();
+
+    assert_eq!(batch.len(), 3);
+    assert_eq!(batch[0].value, b"msg0");
+    assert_eq!(batch[2].value, b"msg2");
 }

@@ -17,6 +17,7 @@ Inspired by systems like Kafka, Logra focuses on simplicity, speed, and a solid 
 * Offset-based log reader (std I/O)
 * Memory-mapped reader (mmap)
 * Log segmentation (size-based rotation)
+* Consumer with position tracking
 * Minimal and extensible design
 
 ---
@@ -86,6 +87,24 @@ let mut log = SegmentedLog::new("logs/", 1024 * 1024)?; // 1MB segments
 log.append(b"message".to_vec())?;
 ```
 
+Consumer (sequential reading with position tracking):
+
+```rust
+use logra::{Consumer, Log};
+
+let offset;
+{
+    let mut log = Log::new("data.log")?;
+    log.append(b"hello".to_vec())?;
+    log.append(b"world".to_vec())?;
+}
+
+let mut consumer = Consumer::new("data.log")?;
+while let Some(msg) = consumer.poll()? {
+    println!("{:?}", msg.value);
+}
+```
+
 ## Building
 
 ```bash
@@ -145,6 +164,7 @@ This approach provides high throughput while keeping implementation simple.
 * [x] Log reader (offset-based)
 * [x] Memory-mapped read (mmap)
 * [x] Log segmentation
+* [x] Consumer system
 
 ### Next
 
@@ -152,7 +172,6 @@ This approach provides high throughput while keeping implementation simple.
 
 ### Future
 
-* [ ] Consumer system
 * [ ] Replication
 * [ ] Network protocol (TCP)
 
