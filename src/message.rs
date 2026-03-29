@@ -43,3 +43,20 @@ pub fn decode(buf: &[u8]) -> std::io::Result<Message> {
         value,
     })
 }
+
+pub fn decode_body(buf: &[u8]) -> std::io::Result<Message> {
+    let mut cursor = Cursor::new(buf);
+
+    let offset = cursor.read_u64::<BigEndian>()?;
+    let timestamp = cursor.read_u64::<BigEndian>()?;
+
+    let len = cursor.read_u32::<BigEndian>()?;
+    let mut value = vec![0; len as usize];
+    cursor.read_exact(&mut value)?;
+
+    Ok(Message {
+        offset,
+        timestamp,
+        value,
+    })
+}

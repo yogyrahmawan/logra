@@ -1,4 +1,4 @@
-use logra::{message, Log, Message};
+use logra::{message, Log, LogReader, Message};
 
 #[test]
 fn test_message_encode_decode() {
@@ -39,4 +39,31 @@ fn test_log_offset_continuity() {
     let offset_after_first = log.append(b"test".to_vec()).unwrap();
 
     assert!(offset_after_first > 0);
+}
+
+#[test]
+fn test_log_reader() {
+    let path = "/tmp/logra_reader_test.log";
+    let _ = std::fs::remove_file(path);
+
+    let offset1;
+    let offset2;
+    {
+        let mut log = Log::new(path).unwrap();
+        offset1 = log.append(b"hello".to_vec()).unwrap();
+        offset2 = log.append(b"world".to_vec()).unwrap();
+    }
+
+    let mut reader = LogReader::new(path).unwrap();
+
+    let msg1 = reader.read_at(offset1).unwrap().unwrap();
+    assert_eq!(msg1.value, b"hello");
+
+    let msg2 = reader.read_at(offset2).unwrap().unwrap();
+    assert_eq!(msg2.value, b"world");
+
+    let all = reader.read_all().unwrap();
+    assert_eq!(all.len(), 2);
+    assert_eq!(all[0].value, b"hello");
+    assert_eq!(all[1].value, b"world");
 }
