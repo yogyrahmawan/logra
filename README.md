@@ -14,7 +14,8 @@ Inspired by systems like Kafka, Logra focuses on simplicity, speed, and a solid 
 * Buffered writes for high throughput
 * Flush policy (interval/size based)
 * Offset recovery on startup
-* Offset-based log reader
+* Offset-based log reader (std I/O)
+* Memory-mapped reader (mmap)
 * Minimal and extensible design
 
 ---
@@ -58,6 +59,21 @@ drop(log);
 
 let mut reader = LogReader::new("data.log")?;
 let msg = reader.read_at(offset1)?.unwrap();
+```
+
+Memory-mapped reading (faster for random access):
+
+```rust
+use logra::{Log, MmapReader};
+
+let offset1;
+{
+    let mut log = Log::new("data.log")?;
+    offset1 = log.append(b"hello".to_vec())?;
+}
+
+let reader = MmapReader::new("data.log")?;
+let msg = reader.read_at(offset1 as usize)?;
 ```
 
 ## Building
@@ -117,10 +133,10 @@ This approach provides high throughput while keeping implementation simple.
 * [x] Flush policy (interval/size)
 * [x] Offset recovery on startup
 * [x] Log reader (offset-based)
+* [x] Memory-mapped read (mmap)
 
 ### Next
 
-* [ ] Memory-mapped read (mmap)
 * [ ] Log segmentation
 
 ### Future

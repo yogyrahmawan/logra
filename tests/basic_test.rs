@@ -1,4 +1,4 @@
-use logra::{message, Log, LogReader, Message};
+use logra::{message, Log, LogReader, Message, MmapReader};
 
 #[test]
 fn test_message_encode_decode() {
@@ -63,6 +63,33 @@ fn test_log_reader() {
     assert_eq!(msg2.value, b"world");
 
     let all = reader.read_all().unwrap();
+    assert_eq!(all.len(), 2);
+    assert_eq!(all[0].value, b"hello");
+    assert_eq!(all[1].value, b"world");
+}
+
+#[test]
+fn test_mmap_reader() {
+    let path = "/tmp/logra_mmap_test.log";
+    let _ = std::fs::remove_file(path);
+
+    let offset1;
+    let offset2;
+    {
+        let mut log = Log::new(path).unwrap();
+        offset1 = log.append(b"hello".to_vec()).unwrap();
+        offset2 = log.append(b"world".to_vec()).unwrap();
+    }
+
+    let reader = MmapReader::new(path).unwrap();
+
+    let msg1 = reader.read_at(offset1 as usize).unwrap();
+    assert_eq!(msg1.value, b"hello");
+
+    let msg2 = reader.read_at(offset2 as usize).unwrap();
+    assert_eq!(msg2.value, b"world");
+
+    let all = reader.read_all();
     assert_eq!(all.len(), 2);
     assert_eq!(all[0].value, b"hello");
     assert_eq!(all[1].value, b"world");

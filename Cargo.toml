@@ -1,7 +1,8 @@
 [package]
 name = "logra"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 byteorder = "1.5"
+memmap2 = "0.9"
