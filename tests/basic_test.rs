@@ -184,3 +184,24 @@ fn test_consumer_batch() {
     assert_eq!(batch[0].value, b"msg0");
     assert_eq!(batch[2].value, b"msg2");
 }
+
+#[test]
+fn test_segment_index() {
+    let dir = "/tmp/logra_index_test";
+    let _ = std::fs::remove_dir_all(dir);
+
+    let mut log = SegmentedLog::new(dir, 1024).unwrap();
+
+    for i in 0..5 {
+        log.append(format!("msg{}", i).into_bytes()).unwrap();
+    }
+
+    log.flush().unwrap();
+    drop(log);
+
+    let idx_path = format!("{}/0000000000000000.idx", dir);
+    assert!(
+        std::path::Path::new(&idx_path).exists(),
+        "Index file should exist"
+    );
+}

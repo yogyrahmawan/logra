@@ -4,6 +4,7 @@ pub mod message;
 pub mod mmap_reader;
 pub mod reader;
 pub mod segment;
+pub mod segment_index;
 
 pub use consumer::Consumer;
 pub use log::{Log, LogConfig};

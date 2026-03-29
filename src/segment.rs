@@ -3,16 +3,19 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 use crate::message::{self, Message};
+use crate::segment_index::SegmentIndex;
 
 pub struct SegmentConfig {
     pub max_size: u64,
+    pub index_interval: usize,
 }
 
 impl Default for SegmentConfig {
     fn default() -> Self {
         Self {
             max_size: 1024 * 1024,
-        } // 1MB default
+            index_interval: 1,
+        }
     }
 }
 
@@ -22,14 +25,18 @@ pub struct Segment {
     writer: BufWriter<File>,
     size: u64,
     max_size: u64,
+    segment_index: SegmentIndex,
+    index_interval: usize,
+    messages_since_index: usize,
 }
 
 impl Segment {
-    pub fn new(dir: &str, index: u64, max_size: u64) -> io::Result<Self> {
+    pub fn new(dir: &str, index: u64, max_size: u64, index_interval: usize) -> io::Result<Self> {
         let path = Self::segment_path(dir, index);
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
 
         let size = file.metadata()?.len();
+        let segment_index = Self::load_index(dir, index);
 
         Ok(Self {
             dir: dir.to_string(),
@@ -37,10 +44,18 @@ impl Segment {
             writer: BufWriter::new(file),
             size,
             max_size,
+            segment_index,
+            index_interval,
+            messages_since_index: 0,
         })
     }
 
-    pub fn open_existing(dir: &str, index: u64, max_size: u64) -> io::Result<Self> {
+    pub fn open_existing(
+        dir: &str,
+        index: u64,
+        max_size: u64,
+        index_interval: usize,
+    ) -> io::Result<Self> {
         let path = Self::segment_path(dir, index);
         if !Path::new(&path).exists() {
             return Err(io::Error::new(
@@ -52,6 +67,7 @@ impl Segment {
         let file = OpenOptions::new().read(true).append(true).open(&path)?;
 
         let size = file.metadata()?.len();
+        let segment_index = Self::load_index(dir, index);
 
         Ok(Self {
             dir: dir.to_string(),
@@ -59,6 +75,9 @@ impl Segment {
             writer: BufWriter::new(file),
             size,
             max_size,
+            segment_index,
+            index_interval,
+            messages_since_index: 0,
         })
     }
 
@@ -76,18 +95,27 @@ impl Segment {
         self.writer.write_all(&encoded)?;
         self.size += msg_size;
 
+        self.messages_since_index += 1;
+        if self.messages_since_index >= self.index_interval {
+            self.segment_index.append(offset, self.size - msg_size);
+            self.messages_since_index = 0;
+        }
+
         Ok((offset, msg_size))
     }
 
     pub fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
+        self.writer.flush()?;
+        self.segment_index
+            .save(Self::index_path(&self.dir, self.index))?;
+        Ok(())
     }
 
     pub fn size(&self) -> u64 {
         self.size
     }
 
-    pub fn index(&self) -> u64 {
+    pub fn index_num(&self) -> u64 {
         self.index
     }
 
@@ -99,8 +127,24 @@ impl Segment {
         Self::segment_path(&self.dir, self.index)
     }
 
+    pub fn find_position(&self, target_offset: u64) -> Option<u64> {
+        self.segment_index.find_position(target_offset)
+    }
+
     fn segment_path(dir: &str, index: u64) -> String {
         format!("{}/{:016x}.log", dir, index)
+    }
+
+    fn index_path(dir: &str, index: u64) -> String {
+        format!("{}/{:016x}.idx", dir, index)
+    }
+
+    fn load_index(dir: &str, index: u64) -> SegmentIndex {
+        let path = Self::index_path(dir, index);
+        match SegmentIndex::load(&path) {
+            Ok(idx) => idx,
+            Err(_) => SegmentIndex::new(),
+        }
     }
 }
 
@@ -108,10 +152,21 @@ pub struct SegmentedLog {
     dir: String,
     current_segment: Segment,
     max_segment_size: u64,
+    index_interval: usize,
 }
 
 impl SegmentedLog {
     pub fn new<P: AsRef<Path>>(dir: P, max_segment_size: u64) -> io::Result<Self> {
+        Self::with_config(
+            dir,
+            SegmentConfig {
+                max_size: max_segment_size,
+                index_interval: 1,
+            },
+        )
+    }
+
+    pub fn with_config<P: AsRef<Path>>(dir: P, config: SegmentConfig) -> io::Result<Self> {
         let dir = dir.as_ref();
         let dir_str = dir.to_string_lossy().to_string();
 
@@ -119,15 +174,16 @@ impl SegmentedLog {
 
         let index = Self::latest_segment_index(&dir_str)?;
         let segment = if index == 0 {
-            Segment::new(&dir_str, 0, max_segment_size)?
+            Segment::new(&dir_str, 0, config.max_size, config.index_interval)?
         } else {
-            Segment::open_existing(&dir_str, index, max_segment_size)?
+            Segment::open_existing(&dir_str, index, config.max_size, config.index_interval)?
         };
 
         Ok(Self {
             dir: dir_str,
             current_segment: segment,
-            max_segment_size,
+            max_segment_size: config.max_size,
+            index_interval: config.index_interval,
         })
     }
 
@@ -151,8 +207,13 @@ impl SegmentedLog {
     }
 
     fn rotate_segment(&mut self) -> io::Result<()> {
-        let new_index = self.current_segment.index() + 1;
-        self.current_segment = Segment::new(&self.dir, new_index, self.max_segment_size)?;
+        let new_index = self.current_segment.index_num() + 1;
+        self.current_segment = Segment::new(
+            &self.dir,
+            new_index,
+            self.max_segment_size,
+            self.index_interval,
+        )?;
         Ok(())
     }
 
@@ -178,7 +239,12 @@ impl SegmentedLog {
         self.current_segment.size()
     }
 
-    pub fn segment_index_for_offset(&self, _offset: u64) -> u64 {
-        0
+    pub fn find_segment_for_offset(&self, offset: u64) -> Option<(u64, String)> {
+        let segment_index = self.current_segment.index_num();
+        let _position = self.current_segment.find_position(offset)?;
+        Some((
+            segment_index,
+            format!("{}/{:016x}.log", self.dir, segment_index),
+        ))
     }
 }
