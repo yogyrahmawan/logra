@@ -1,4 +1,4 @@
-use logra::{message, Log, LogReader, Message, MmapReader};
+use logra::{message, Log, LogReader, Message, MmapReader, SegmentedLog};
 
 #[test]
 fn test_message_encode_decode() {
@@ -93,4 +93,42 @@ fn test_mmap_reader() {
     assert_eq!(all.len(), 2);
     assert_eq!(all[0].value, b"hello");
     assert_eq!(all[1].value, b"world");
+}
+
+#[test]
+fn test_segmented_log() {
+    let dir = "/tmp/logra_segment_test";
+    let _ = std::fs::remove_dir_all(dir);
+    let segment_size = 100; // small size to trigger rotation
+
+    let mut log = SegmentedLog::new(dir, segment_size).unwrap();
+
+    // Append messages until we trigger rotation
+    let mut offsets = Vec::new();
+    for i in 0..10 {
+        let msg = format!("message{}", i);
+        let offset = log.append(msg.into_bytes()).unwrap();
+        offsets.push(offset);
+    }
+
+    log.flush().unwrap();
+    drop(log);
+
+    // Check segments were created
+    let entries: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .collect();
+
+    // Should have more than 1 segment file
+    let seg_count = entries
+        .iter()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".log"))
+        .count();
+
+    assert!(
+        seg_count >= 2,
+        "Expected at least 2 segments, got {}",
+        seg_count
+    );
 }
